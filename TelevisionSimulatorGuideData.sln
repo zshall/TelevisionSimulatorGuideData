@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.34330.188
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelevisionSimulatorGuideData", "TelevisionSimulatorGuideData.csproj", "{21FC918A-45D0-478C-B75B-2B1039268127}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{21FC918A-45D0-478C-B75B-2B1039268127}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{21FC918A-45D0-478C-B75B-2B1039268127}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{21FC918A-45D0-478C-B75B-2B1039268127}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{21FC918A-45D0-478C-B75B-2B1039268127}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {57D3594E-5748-4794-AC1A-BE7EDCD1D79A}
+	EndGlobalSection
+EndGlobal
