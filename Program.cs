@@ -12,6 +12,7 @@ public class Program
         builder.Services.AddSingleton<ProgramGuide>();
 
         var app = builder.Build();
+        app.UseOutputCache();
 
         // Configure the HTTP request pipeline.
 
@@ -20,7 +21,7 @@ public class Program
 
 
         app.MapGet("/guide",
-            (ProgramGuide guide) => guide.GetData()).CacheOutput(policy => policy.Expire(TimeSpan.FromMinutes(5)));
+            (ProgramGuide guide, IConfiguration config) => guide.GetData(config.GetSection("ListingsFile").Value)).CacheOutput(policy => policy.Expire(TimeSpan.FromMinutes(5)));
 
         app.Run();
     }

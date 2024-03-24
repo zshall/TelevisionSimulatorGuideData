@@ -1,6 +1,6 @@
 @TelevisionSimulatorGuideData_HostAddress = http://localhost:5195
 
-GET {{TelevisionSimulatorGuideData_HostAddress}}/weatherforecast/
+GET {{TelevisionSimulatorGuideData_HostAddress}}/guide/
 Accept: application/json
 
 ###

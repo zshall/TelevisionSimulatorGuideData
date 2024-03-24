@@ -5,22 +5,25 @@ namespace TelevisionSimulatorGuideData;
 
 public class ProgramGuide
 {
-    public Dictionary<string, IEnumerable<GuideData>> GetData()
+    public Dictionary<string, IEnumerable<GuideData>> GetData(string? listingsFile, DateTimeOffset? start = null)
     {
-        var doc = new XmlDocument();
-        doc.Load(@"C:\Users\zshal\Desktop\listings.xml");
-        var xd = doc.ToXDocument();
+        ArgumentNullException.ThrowIfNull(listingsFile);
 
-        var startingTimeslot = (int)Math.Floor(GetTimeslot(DateTimeOffset.Now));
+        start ??= DateTimeOffset.Now;
+        var doc = new XmlDocument();
+        doc.Load(listingsFile);
+        var xDoc = doc.ToXDocument();
+
+        var startingTimeslot = (int)Math.Floor(GetTimeslot(start.Value));
         var numberOfTimeslots = 3;
 
         var timeslots = Enumerable.Range(startingTimeslot, numberOfTimeslots);
 
-        var channels = xd.XPathSelectElements("//channel").ToDictionary(k => k.Attribute("id").Value, e => e.Element("display-name").Value);
+        var channels = xDoc.XPathSelectElements("//channel").ToDictionary(k => k.Attribute("id").Value, e => e.Element("display-name").Value);
 
         var categoriesWeCareAbout = new List<string> { "sports event", "news", "kids", "movie" };
 
-        var todaysPrograms = xd.XPathSelectElements(@"//programme[
+        var todaysPrograms = xDoc.XPathSelectElements(@"//programme[
 		date = '20240324'
 	]").Select(p => new {
             Id = p.Attribute("channel").Value,
