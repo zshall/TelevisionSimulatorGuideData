@@ -5,7 +5,7 @@ namespace TelevisionSimulatorGuideData;
 
 public class ProgramGuide
 {
-    public IList<GuideData> GetData(string? listingsFile, DateTimeOffset? start = null)
+    public Dictionary<string, IEnumerable<GuideData>> GetData(string? listingsFile, DateTimeOffset? start = null)
     {
         ArgumentNullException.ThrowIfNull(listingsFile);
 
@@ -40,7 +40,7 @@ public class ProgramGuide
             return timeslots.Select(i => group.Aggregate((x, y) => Math.Abs(x.Start - i) < Math.Abs(y.Start - i) ? x : y)).DistinctBy(p => p.Start);
         });
 
-        return currentTimeslotsPrograms.SelectMany(group => {
+        return currentTimeslotsPrograms.ToDictionary(key => key.FirstOrDefault().Id, group => {
             return group.Select((p, i) => new GuideData {
                 Channel = channels[p.Id],
                 Timeslot = i,
@@ -52,7 +52,7 @@ public class ProgramGuide
                 IsSubtitled = null != p.Subtitles,
                 Rating = p.Rating
             });
-        }).ToList();
+        });
     }
     
     private static double GetTimeslot(string? dateString)
