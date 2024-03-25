@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-	  <DockerfileRunArguments>-v "C:\x\GuideData:/data:ro"</DockerfileRunArguments>
+	  <DockerfileRunArguments>-v "C:\Data Store\GuideData:/data:ro"</DockerfileRunArguments>
   </PropertyGroup>
 
   <ItemGroup>
