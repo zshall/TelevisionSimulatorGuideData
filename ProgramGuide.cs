@@ -1,11 +1,12 @@
-﻿using System.Xml;
+﻿using System.Collections.Immutable;
+using System.Xml;
 using System.Xml.XPath;
 
 namespace TelevisionSimulatorGuideData;
 
 public class ProgramGuide
 {
-    public Dictionary<string, IEnumerable<GuideData>> GetData(string? listingsFile, DateTimeOffset? start = null)
+    public ImmutableSortedDictionary<string, IEnumerable<GuideData>> GetData(string? listingsFile, DateTimeOffset? start = null)
     {
         ArgumentNullException.ThrowIfNull(listingsFile);
 
@@ -15,8 +16,9 @@ public class ProgramGuide
         var xDoc = doc.ToXDocument();
 
         var startingTimeslot = (int)Math.Floor(GetTimeslot(start.Value));
-        var numberOfTimeslots = 3;
+        var isThreeGrid = true; // whether we're showing 3 timeslots per row
 
+        var numberOfTimeslots = isThreeGrid ? 3 : 1;
         var timeslots = Enumerable.Range(startingTimeslot, numberOfTimeslots);
 
         var channels = xDoc.XPathSelectElements("//channel").ToDictionary(k => k.Attribute("id").Value, e => e.Element("display-name").Value);
@@ -25,25 +27,30 @@ public class ProgramGuide
 
         var todaysPrograms = xDoc.XPathSelectElements(@"//programme[
 		date = '20240324'
-	]").Select(p => new {
-            Id = p.Attribute("channel").Value,
-            Start = GetTimeslot(p.Attribute("start").Value),
-            End = GetTimeslot(p.Attribute("stop").Value),
-            Title = p.Element("title").Value,
-            Category = p.Elements("category").Where(p => categoriesWeCareAbout.Contains(p.Value, StringComparer.OrdinalIgnoreCase)).FirstOrDefault()?.Value,
-            Stereo = p.XPathSelectElement("//stereo")?.Value,
-            Subtitles = p.XPathSelectElement("//subtitles")?.Attribute("type")?.Value,
-            Rating = p.XPathSelectElement("//rating[@system='MPAA']/value")?.Value
+	]").Select(p => {
+            var category = p.Elements("category").Where(p => categoriesWeCareAbout.Contains(p.Value, StringComparer.OrdinalIgnoreCase)).FirstOrDefault()?.Value.ToLowerInvariant();
+
+            return new ListingRecord(
+                p.Attribute("channel").Value,
+                GetTimeslot(p.Attribute("start").Value),
+                GetTimeslot(p.Attribute("stop").Value),
+                p.Element("title").Value,
+                category,
+                p.XPathSelectElement("//stereo")?.Value,
+                p.XPathSelectElement("//subtitles")?.Attribute("type")?.Value,
+                p.XPathSelectElement($"//rating[@system='{(category == "movie" ? "MPAA" : "VCHIP")}']/value")?.Value
+            );
         }).OrderBy(p => p.Start).GroupBy(p => p.Id);
 
         var currentTimeslotsPrograms = todaysPrograms.Select(group => {
             return timeslots.Select(i => group.Aggregate((x, y) => Math.Abs(x.Start - i) < Math.Abs(y.Start - i) ? x : y)).DistinctBy(p => p.Start);
         });
 
-        return currentTimeslotsPrograms.ToDictionary(key => key.FirstOrDefault().Id, group => {
+        return currentTimeslotsPrograms.ToImmutableSortedDictionary(key => channels[key.FirstOrDefault().Id], group => {
             return group.Select((p, i) => new GuideData {
                 Channel = channels[p.Id],
                 Timeslot = i,
+                Span = GetSpan(group, i, startingTimeslot, isThreeGrid),
                 IsContinuedLeft = p.Start < startingTimeslot,
                 IsContinuedRight = p.End > startingTimeslot + numberOfTimeslots,
                 Title = p.Title,
@@ -54,7 +61,40 @@ public class ProgramGuide
             });
         });
     }
-    
+
+    /// <summary>
+    /// Gets the span of the program in timeslots, up to the maximum number of timeslots.
+    /// </summary>
+    /// <param name="group">List of programs</param>
+    /// <param name="i"></param>
+    /// <param name="startingTimeslot"></param>
+    /// <param name="numberOfTimeslots"></param>
+    /// <returns></returns>
+    private int GetSpan(IEnumerable<ListingRecord> group, int i, int startingTimeslot, bool isThreeGrid) {
+        if (!isThreeGrid || group.Count() == 3) {
+            return 1;
+        }
+
+        if (group.Count() == 1) {
+            return 3;
+        }
+
+        // one of the programs needs to be 1 timeslot wide and the other needs to be 2.
+        // not my finest code... it produces results but they're not always correct.
+        // the problem with this method and why I've had so much trouble with it is that it really
+        // requires us to know what the other programs have spanned; we're coalescing the closest programs
+        // together and rounding off to the nearest timeslot rather than just showing the actual data.
+        var first = group.First();
+
+        if (i == 0) {
+            return first.End > startingTimeslot + 1 ? 2 : 1;
+        } else if (GetSpan(group, 0, startingTimeslot, isThreeGrid) == 2) {
+            return 1;
+        }
+
+        return 2;
+    }
+
     private static double GetTimeslot(string? dateString)
     {
         var converted = ConvertDateString(dateString);
@@ -81,3 +121,5 @@ public class ProgramGuide
         }
     }
 }
+
+internal record ListingRecord(string Id, double Start, double End, string Title, string? Category, string? Stereo, string? Subtitles, string? Rating);

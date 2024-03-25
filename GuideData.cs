@@ -4,6 +4,7 @@ public class GuideData
 {
     public string? Channel { get; set; }
     public int Timeslot { get; set; }
+    public int Span { get; set; }
     public bool IsContinuedLeft { get; set; }
     public bool IsContinuedRight { get; set; }
     public string? Title { get; set; }

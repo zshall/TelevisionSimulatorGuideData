@@ -9,9 +9,11 @@ public class Program
         // Add services to the container.
 
         builder.Services.AddOutputCache();
+        builder.Services.AddCors();
         builder.Services.AddSingleton<ProgramGuide>();
 
         var app = builder.Build();
+        app.UseCors(options => options.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
         app.UseOutputCache();
 
         // Configure the HTTP request pipeline.
