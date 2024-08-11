@@ -6,6 +6,12 @@ namespace TelevisionSimulatorGuideData;
 
 public class ProgramGuide
 {
+    /// <summary>
+    /// Gets the current guide data in TVSL JSON format.
+    /// </summary>
+    /// <param name="listingsFile"></param>
+    /// <param name="start"></param>
+    /// <returns></returns>
     public ImmutableSortedDictionary<string, IEnumerable<GuideData>> GetData(string? listingsFile, DateTimeOffset? start = null)
     {
         ArgumentNullException.ThrowIfNull(listingsFile);
@@ -25,8 +31,10 @@ public class ProgramGuide
 
         var categoriesWeCareAbout = new List<string> { "sports event", "news", "kids", "movie" };
 
-        var todaysPrograms = xDoc.XPathSelectElements(@"//programme[
-		date = '20240324'
+        var dateString = start.Value.ToString("yyyyMMdd");
+
+        var todaysPrograms = xDoc.XPathSelectElements(@$"//programme[
+		date = '{dateString}'
 	]").Select(p => {
             var category = p.Elements("category").Where(p => categoriesWeCareAbout.Contains(p.Value, StringComparer.OrdinalIgnoreCase)).FirstOrDefault()?.Value.ToLowerInvariant();
 
@@ -95,17 +103,33 @@ public class ProgramGuide
         return 2;
     }
 
+    /// <summary>
+    /// Gets the timeslot from a date string.
+    /// </summary>
+    /// <param name="dateString"></param>
+    /// <returns></returns>
     private static double GetTimeslot(string? dateString)
     {
         var converted = ConvertDateString(dateString);
         return GetTimeslot(converted);
     }
 
+    /// <summary>
+    /// Gets the timeslot for the given date.
+    /// </summary>
+    /// <param name="d"></param>
+    /// <returns></returns>
     private static double GetTimeslot(DateTimeOffset d)
     {
         return (d.Hour * 2) + Math.Round((double)d.Minute / 60, 3);
     }
 
+    /// <summary>
+    /// Converts a date string to a DateTimeOffset.
+    /// </summary>
+    /// <param name="dateString"></param>
+    /// <returns></returns>
+    /// <exception cref="ArgumentException"></exception>
     private static DateTimeOffset ConvertDateString(string? dateString)
     {
         string format = "yyyyMMddHHmmss zzz";
