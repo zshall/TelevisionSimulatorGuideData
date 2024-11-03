@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Xml;
 using System.Xml.XPath;
 
@@ -44,9 +44,9 @@ public class ProgramGuide
                 GetTimeslot(p.Attribute("stop").Value),
                 p.Element("title").Value,
                 category,
-                p.XPathSelectElement("//stereo")?.Value,
-                p.XPathSelectElement("//subtitles")?.Attribute("type")?.Value,
-                p.XPathSelectElement($"//rating[@system='{(category == "movie" ? "MPAA" : "VCHIP")}']/value")?.Value
+                p.XPathSelectElement("stereo")?.Value,
+                p.XPathSelectElement("subtitles")?.Attribute("type")?.Value,
+                p.XPathSelectElement($"rating[@system='{(category == "movie" ? "MPAA" : "VCHIP")}']/value")?.Value
             );
         }).OrderBy(p => p.Start).GroupBy(p => p.Id);
 
