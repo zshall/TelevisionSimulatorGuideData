@@ -1,6 +1,5 @@
 ﻿using System.Collections.Immutable;
 using System.Text.RegularExpressions;
-using System.Xml;
 using System.Xml.XPath;
 
 namespace TelevisionSimulatorGuideData;
@@ -39,7 +38,9 @@ public class ProgramGuide
         var todaysPrograms = xDoc.XPathSelectElements(@$"//programme[
 		date = '{dateString}'
 	]").Select(p => {
-            var category = p.Elements("category").Where(p => categoriesWeCareAbout.Contains(p.Value, StringComparer.OrdinalIgnoreCase)).FirstOrDefault()?.Value.ToLowerInvariant();
+            var category = p.Elements("category")
+                .FirstOrDefault(p => categoriesWeCareAbout.Contains(p.Value, StringComparer.OrdinalIgnoreCase))?.Value
+                .ToLowerInvariant();
 
             return new ListingRecord(
                 p.Attribute("channel").Value,
@@ -54,12 +55,14 @@ public class ProgramGuide
         }).OrderBy(p => p.Start).GroupBy(p => p.Id);
 
         var currentTimeslotsPrograms = todaysPrograms.Select(group => {
-            return timeslots.Select(i => group.Aggregate((x, y) => Math.Abs(x.Start - i) < Math.Abs(y.Start - i) ? x : y)).DistinctBy(p => p.Start);
+            return timeslots
+                .Select(i => group.Aggregate((x, y) => Math.Abs(x.Start - i) < Math.Abs(y.Start - i) ? x : y))
+                .DistinctBy(p => p.Start);
         });
 
         var listings = currentTimeslotsPrograms.ToDictionary(key => key.FirstOrDefault().Id, group => {
             return group.Select((p, i) => new ListingData {
-                Timeslot = i,
+                Start = i,
                 Span = GetSpan(group, i, startingTimeslot, numberOfTimeslots > 1),
                 IsContinuedLeft = p.Start < startingTimeslot,
                 IsContinuedRight = p.End > startingTimeslot + numberOfTimeslots,
