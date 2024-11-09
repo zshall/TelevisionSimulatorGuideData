@@ -1,4 +1,5 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
+using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.XPath;
 
@@ -12,22 +13,26 @@ public class ProgramGuide
     /// <param name="listingsFile"></param>
     /// <param name="start"></param>
     /// <returns></returns>
-    public ImmutableSortedDictionary<string, IEnumerable<GuideData>> GetData(string? listingsFile, DateTimeOffset? start = null)
+    public TvslSchema GetData(string? listingsFile, DateTimeOffset? start = null, int numberOfTimeslots = 3, int minutesPerTimeslot = 30)
     {
         ArgumentNullException.ThrowIfNull(listingsFile);
 
-        start ??= DateTimeOffset.Now;
+        if (numberOfTimeslots < 1) {
+            throw new ArgumentOutOfRangeException(nameof(numberOfTimeslots), "Number of timeslots must be greater than 0.");
+        }
+
+        start ??= DateTimeOffset.Parse("3/24/2024 12:00 AM");
         var doc = new XmlDocument();
         doc.Load(listingsFile);
         var xDoc = doc.ToXDocument();
 
         var startingTimeslot = (int)Math.Floor(GetTimeslot(start.Value));
-        var isThreeGrid = true; // whether we're showing 3 timeslots per row
-
-        var numberOfTimeslots = isThreeGrid ? 3 : 1;
         var timeslots = Enumerable.Range(startingTimeslot, numberOfTimeslots);
 
-        var channels = xDoc.XPathSelectElements("//channel").ToDictionary(k => k.Attribute("id").Value, e => e.Element("display-name").Value);
+        var channels = xDoc.XPathSelectElements("//channel").ToDictionary(k => k.Attribute("id").Value, e => new {
+            Number = e.XPathSelectElements("display-name").FirstOrDefault(p => Regex.IsMatch(p.Value, @"^\d+$"))?.Value,
+            Abbr = e.XPathSelectElements("display-name").FirstOrDefault(p => Regex.IsMatch(p.Value, @"^[A-Z]+[A-Z0-9]*$"))?.Value
+        });
 
         var categoriesWeCareAbout = new List<string> { "sports event", "news", "kids", "movie" };
 
@@ -54,11 +59,11 @@ public class ProgramGuide
             return timeslots.Select(i => group.Aggregate((x, y) => Math.Abs(x.Start - i) < Math.Abs(y.Start - i) ? x : y)).DistinctBy(p => p.Start);
         });
 
-        return currentTimeslotsPrograms.ToImmutableSortedDictionary(key => channels[key.FirstOrDefault().Id], group => {
-            return group.Select((p, i) => new GuideData {
-                Channel = channels[p.Id],
+        var listings = currentTimeslotsPrograms.ToImmutableSortedDictionary(key => channels[key.FirstOrDefault().Id].Number, group => {
+            return group.Select((p, i) => new ListingData {
+                ChannelId = p.Id,
                 Timeslot = i,
-                Span = GetSpan(group, i, startingTimeslot, isThreeGrid),
+                Span = GetSpan(group, i, startingTimeslot, numberOfTimeslots > 1),
                 IsContinuedLeft = p.Start < startingTimeslot,
                 IsContinuedRight = p.End > startingTimeslot + numberOfTimeslots,
                 Title = p.Title,
@@ -68,6 +73,19 @@ public class ProgramGuide
                 Rating = p.Rating
             });
         });
+
+        return new TvslSchema {
+            Listings = listings,
+            Channels = channels
+                .OrderBy(kv => string.IsNullOrWhiteSpace(kv.Value.Number) ? int.MaxValue : int.Parse(kv.Value.Number))
+                .ToImmutableSortedDictionary(
+                    k => k.Key,
+                    v => new ChannelData {
+                        Abbr = v.Value.Abbr,
+                        Number = string.IsNullOrWhiteSpace(v.Value.Number) ? null : int.Parse(v.Value.Number)
+                    }
+                )
+        };
     }
 
     /// <summary>
@@ -147,3 +165,4 @@ public class ProgramGuide
 }
 
 internal record ListingRecord(string Id, double Start, double End, string Title, string? Category, string? Stereo, string? Subtitles, string? Rating);
+
