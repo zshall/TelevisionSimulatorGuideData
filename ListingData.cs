@@ -85,7 +85,7 @@ public class TvslSchema {
     /// <summary>
     /// Channels in the guide
     /// </summary>
-    public ImmutableSortedDictionary<string, ChannelData> Channels { get; set; }
+    public Dictionary<string, ChannelData> Channels { get; set; }
 }
 
 /// <summary>

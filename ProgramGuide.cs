@@ -1,4 +1,6 @@
-﻿using System.Xml.XPath;
+﻿using System.Collections.Immutable;
+using System.Xml.Linq;
+using System.Xml.XPath;
 using L = TelevisionSimulatorGuideData.ListingFileService;
 
 namespace TelevisionSimulatorGuideData {
@@ -11,18 +13,20 @@ namespace TelevisionSimulatorGuideData {
         /// <summary>
         /// Gets the current guide data in TVSL JSON format.
         /// </summary>
-        /// <param name="now"></param>
-        /// <param name="numberOfTimeslots"></param>
-        /// <param name="minutesPerTimeslot"></param>
+        /// <param name="now">Time to retrieve data for</param>
+        /// <param name="numberOfTimeslots">Number of timeslots to provide info on</param>
+        /// <param name="minutesPerTimeslot">Minutes per timeslot to determine min and max range for data</param>
+        /// <param name="lowerChannelLimitInclusive">If specified, filter out channels below this number.</param>
+        /// <param name="upperChannelLimitExclusive">If specified, filter out channels above this number.</param>
         /// <returns></returns>
-        public TvslSchema GetData(DateTimeOffset? now = null, int numberOfTimeslots = 3, int minutesPerTimeslot = 30)
+        public TvslSchema GetData(DateTimeOffset? now = null, int numberOfTimeslots = 3, int minutesPerTimeslot = 30, int? lowerChannelLimitInclusive = null, int? upperChannelLimitExclusive = null)
         {
             if (numberOfTimeslots < 1) {
                 throw new ArgumentOutOfRangeException(nameof(numberOfTimeslots), "Number of timeslots must be greater than 0.");
             }
 
             if (MinutesInDay % minutesPerTimeslot != 0) {
-                throw new ArgumentOutOfRangeException(nameof(minutesPerTimeslot), "Minutes per timeslot must divide evenly into the number of minutes in a day (1440).");
+                throw new ArgumentOutOfRangeException(nameof(minutesPerTimeslot), "Minutes per timeslot must divide evenly into the number of minutes in a day (1440). Valid options are: 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24, 30, 36, 40, 45, 48, 60, 72, 80, 90, 120, 144, 180, 240, 360, 720, 1440.");
             }
 
 #if DEBUG
@@ -44,7 +48,25 @@ namespace TelevisionSimulatorGuideData {
                 .Last(p => p <= now);
             var endTime = startingTimeslot.AddMinutes(minutesPerTimeslot * numberOfTimeslots);
 
-            var programs = L.GetProgramsForTimeRange(startingTimeslot, endTime);
+            Dictionary<string, ChannelData> channels;
+            IEnumerable<XElement> programs;
+            if (lowerChannelLimitInclusive.HasValue || upperChannelLimitExclusive.HasValue) {
+                if (lowerChannelLimitInclusive.HasValue && upperChannelLimitExclusive.HasValue && lowerChannelLimitInclusive >= upperChannelLimitExclusive) {
+                    throw new ArgumentOutOfRangeException(nameof(lowerChannelLimitInclusive), "Lower channel limit must be less than upper channel limit.");
+                }
+
+                channels = L.Channels.Where(kv =>
+                    (!lowerChannelLimitInclusive.HasValue || kv.Value.Number >= lowerChannelLimitInclusive) &&
+                    (!upperChannelLimitExclusive.HasValue || kv.Value.Number < upperChannelLimitExclusive))
+                    .ToDictionary();
+
+                programs = L.GetProgramsForTimeRange(startingTimeslot, endTime, channels.Select(kv => kv.Key).ToList());
+            }
+            else {
+                channels = L.Channels;
+                programs = L.GetProgramsForTimeRange(startingTimeslot, endTime);
+            }
+            
             var listings = programs.Select(p => {
                 var category = p.Elements("category").FirstOrDefault(p =>
                         Metadata.ColorCodedCategories.Contains(p.Value, StringComparer.OrdinalIgnoreCase))?.Value
@@ -77,7 +99,7 @@ namespace TelevisionSimulatorGuideData {
             }).Where(p => p.Span > 0).OrderBy(p => p.Start);
 
             return new TvslSchema {
-                Channels = L.Channels,
+                Channels = channels,
                 Listings = listings
                     .GroupBy(listing => listing.ChannelId) // Group listings by ChannelId
                     .ToDictionary(group => group.Key, group => group.ToList()) // Convert to dictionary

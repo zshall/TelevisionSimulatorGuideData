@@ -7,7 +7,7 @@ using System.Xml.XPath;
 namespace TelevisionSimulatorGuideData {
     public class ListingFileService : IHostedService {
         public static XDocument? ListingsDocument;
-        public static ImmutableSortedDictionary<string, ChannelData>? Channels;
+        public static Dictionary<string, ChannelData> Channels;
 
         private readonly IConfiguration _config;
         private readonly ILogger<ListingFileService> _logger;
@@ -87,7 +87,7 @@ namespace TelevisionSimulatorGuideData {
                             .FirstOrDefault(p => Regex.IsMatch(p.Value, @"^[A-Z]+[A-Z0-9]*$"))?.Value
                     }).OrderBy(kv =>
                     string.IsNullOrWhiteSpace(kv.Value.Number) ? int.MaxValue : int.Parse(kv.Value.Number))
-                .ToImmutableSortedDictionary(
+                .ToDictionary(
                     k => k.Key,
                     v => new ChannelData {
                         Abbr = v.Value.Abbr,
@@ -101,13 +101,20 @@ namespace TelevisionSimulatorGuideData {
         /// </summary>
         /// <param name="fromDateTime"></param>
         /// <param name="toDateTime"></param>
-        public static IEnumerable<XElement> GetProgramsForTimeRange(DateTimeOffset fromDateTime, DateTimeOffset toDateTime)
+        /// <param name="channels"></param>
+        public static IEnumerable<XElement> GetProgramsForTimeRange(DateTimeOffset fromDateTime,
+            DateTimeOffset toDateTime, List<string>? channels = null)
         {
+            if (null == ListingsDocument) {
+                throw new InvalidOperationException("Listings document is not loaded.");
+            }
+
             return ListingsDocument.Descendants("programme")
                 .Where(p => {
                     var start = p.Attribute("start").Value.ToDateTimeOffsetFromXmlTvTime();
                     var stop = p.Attribute("stop").Value.ToDateTimeOffsetFromXmlTvTime();
-                    return !(start < fromDateTime && stop < fromDateTime) && !(start > toDateTime && stop > toDateTime);
+                    return (null == channels || channels.Contains(p.Attribute("channel")?.Value))
+                        && !(start < fromDateTime && stop < fromDateTime) && !(start > toDateTime && stop > toDateTime);
                 });
         }
     }
