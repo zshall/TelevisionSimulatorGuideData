@@ -114,7 +114,9 @@ public class ProgramGuide
 
         if (i == 0) {
             return first.End > startingTimeslot + 1 ? 2 : 1;
-        } else if (GetSpan(group, 0, startingTimeslot, isThreeGrid) == 2) {
+        }
+
+        if (GetSpan(group, 0, startingTimeslot, isThreeGrid) == 2) {
             return 1;
         }
 

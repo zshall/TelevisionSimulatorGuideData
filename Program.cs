@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.ResponseCompression;
+
 namespace TelevisionSimulatorGuideData;
 
 public class Program
@@ -11,8 +13,14 @@ public class Program
         builder.Services.AddOutputCache();
         builder.Services.AddCors();
         builder.Services.AddSingleton<ProgramGuide>();
+        builder.Services.AddResponseCompression(options =>
+        {
+            options.Providers.Add<GzipCompressionProvider>();
+            options.EnableForHttps = true;
+        });
 
         var app = builder.Build();
+        app.UseResponseCompression();
         app.UseCors(options => options.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
         app.UseOutputCache();
 
