@@ -22,9 +22,7 @@ public class ProgramGuide
         }
 
         start ??= DateTimeOffset.Parse("3/24/2024 12:00 AM");
-        var doc = new XmlDocument();
-        doc.Load(listingsFile);
-        var xDoc = doc.ToXDocument();
+        var xDoc = ListingFileService.ListingsDocument;
 
         var startingTimeslot = (int)Math.Floor(GetTimeslot(start.Value));
         var timeslots = Enumerable.Range(startingTimeslot, numberOfTimeslots);
@@ -59,9 +57,8 @@ public class ProgramGuide
             return timeslots.Select(i => group.Aggregate((x, y) => Math.Abs(x.Start - i) < Math.Abs(y.Start - i) ? x : y)).DistinctBy(p => p.Start);
         });
 
-        var listings = currentTimeslotsPrograms.ToImmutableSortedDictionary(key => channels[key.FirstOrDefault().Id].Number, group => {
+        var listings = currentTimeslotsPrograms.ToDictionary(key => key.FirstOrDefault().Id, group => {
             return group.Select((p, i) => new ListingData {
-                ChannelId = p.Id,
                 Timeslot = i,
                 Span = GetSpan(group, i, startingTimeslot, numberOfTimeslots > 1),
                 IsContinuedLeft = p.Start < startingTimeslot,

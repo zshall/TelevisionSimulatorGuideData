@@ -9,7 +9,7 @@ public class Program
         var builder = WebApplication.CreateBuilder(args);
 
         // Add services to the container.
-
+        builder.Services.AddHostedService<ListingFileService>();
         builder.Services.AddOutputCache();
         builder.Services.AddCors();
         builder.Services.AddSingleton<ProgramGuide>();

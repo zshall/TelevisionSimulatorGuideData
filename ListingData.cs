@@ -2,9 +2,11 @@
 
 namespace TelevisionSimulatorGuideData;
 
+/// <remarks>
+/// This is going to be inside of a dictionary where the key is the channel ID so we don't need a channel ID property
+/// </remarks>
 public class ListingData
 {
-    public string? ChannelId { get; set; }
     public int Timeslot { get; set; }
     public int Span { get; set; }
     public bool IsContinuedLeft { get; set; }
@@ -22,6 +24,6 @@ public class ChannelData {
 }
 
 public class TvslSchema {
-    public ImmutableSortedDictionary<string, IEnumerable<ListingData>> Listings { get; set; }
+    public Dictionary<string, IEnumerable<ListingData>> Listings { get; set; }
     public ImmutableSortedDictionary<string, ChannelData> Channels { get; set; }
 }
