@@ -26,8 +26,7 @@ public class Program
 
         // Configure the HTTP request pipeline.
 
-        app.MapGet("/guide",
-            (ProgramGuide guide, IConfiguration config) => guide.GetData(config.GetSection("ListingsFile").Value))
+        app.MapGet("/guide", (ProgramGuide guide) => guide.GetData())
             .CacheOutput(policy => policy.Expire(TimeSpan.FromMinutes(5)));
 
         app.Run();

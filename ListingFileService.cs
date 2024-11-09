@@ -1,9 +1,13 @@
-﻿using System.Xml;
+﻿using System.Collections.Immutable;
+using System.Text.RegularExpressions;
+using System.Xml;
 using System.Xml.Linq;
+using System.Xml.XPath;
 
 namespace TelevisionSimulatorGuideData {
     public class ListingFileService : IHostedService {
-        public static XDocument ListingsDocument;
+        public static XDocument? ListingsDocument;
+        public static ImmutableSortedDictionary<string, ChannelData>? Channels;
 
         private readonly IConfiguration _config;
         private readonly ILogger<ListingFileService> _logger;
@@ -16,6 +20,12 @@ namespace TelevisionSimulatorGuideData {
             _logger = logger;
         }
 
+        /// <summary>
+        /// Starts the file watcher and loads the listings file.
+        /// </summary>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentNullException"></exception>
         public Task StartAsync(CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(_config.GetSection("ListingsFile").Value)) {
@@ -37,6 +47,11 @@ namespace TelevisionSimulatorGuideData {
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Stops the service
+        /// </summary>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
         public Task StopAsync(CancellationToken cancellationToken)
         {
             _fileWatcher.EnableRaisingEvents = false;
@@ -44,17 +59,56 @@ namespace TelevisionSimulatorGuideData {
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Reloads the listing data when the XML file changes.
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void OnXmlFileChanged(object sender, FileSystemEventArgs e)
         {
             LoadDocument();
         }
 
+        /// <summary>
+        /// Loads the listings file into an XDocument and pre-computes list of channels.
+        /// </summary>
         private void LoadDocument()
         {
             var doc = new XmlDocument();
             doc.Load(_xmlFilePath);
             ListingsDocument = doc.ToXDocument();
             _logger.LogInformation("Listings File updated.");
+
+            Channels = ListingsDocument.XPathSelectElements("//channel").ToDictionary(k => k.Attribute("id").Value, e =>
+                    new {
+                        Number = e.XPathSelectElements("display-name")
+                            .FirstOrDefault(p => Regex.IsMatch(p.Value, @"^\d+$"))?.Value,
+                        Abbr = e.XPathSelectElements("display-name")
+                            .FirstOrDefault(p => Regex.IsMatch(p.Value, @"^[A-Z]+[A-Z0-9]*$"))?.Value
+                    }).OrderBy(kv =>
+                    string.IsNullOrWhiteSpace(kv.Value.Number) ? int.MaxValue : int.Parse(kv.Value.Number))
+                .ToImmutableSortedDictionary(
+                    k => k.Key,
+                    v => new ChannelData {
+                        Abbr = v.Value.Abbr,
+                        Number = string.IsNullOrWhiteSpace(v.Value.Number) ? null : int.Parse(v.Value.Number)
+                    }
+                );
+        }
+
+        /// <summary>
+        /// Gets all programs for a specific time range using the `start` and `stop` attributes of the `programme` element.
+        /// </summary>
+        /// <param name="fromDateTime"></param>
+        /// <param name="toDateTime"></param>
+        public static IEnumerable<XElement> GetProgramsForTimeRange(DateTimeOffset fromDateTime, DateTimeOffset toDateTime)
+        {
+            return ListingsDocument.Descendants("programme")
+                .Where(p => {
+                    var start = p.Attribute("start").Value.ToDateTimeOffsetFromXmlTvTime();
+                    var stop = p.Attribute("stop").Value.ToDateTimeOffsetFromXmlTvTime();
+                    return !(start < fromDateTime && stop < fromDateTime) && !(start > toDateTime && stop > toDateTime);
+                });
         }
     }
 }

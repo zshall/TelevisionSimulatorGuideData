@@ -1,32 +1,24 @@
 ﻿using System.Collections.Immutable;
+using System.Text.Json.Serialization;
 
 namespace TelevisionSimulatorGuideData;
 
 /// <remarks>
-/// This is going to be inside of a dictionary where the key is the channel ID so we don't need a channel ID property
+/// This is going to be inside a dictionary where the key is the channel ID so we don't need a channel ID property
 /// </remarks>
-public class ListingData
+public class ListingData : SpanInfo
 {
+    /// <summary>
+    /// Channel ID
+    /// </summary>
+    public string ChannelId { get; set; }
+
     /// <summary>
     /// The start time in minutes from midnight.
     /// (Based on how the data is used I'm not sure if this will be useful since we start the guide from now)
     /// </summary>
-    public int Start { get; set; }
-
-    /// <summary>
-    /// The duration of the program in minutes.
-    /// </summary>
-    public int Span { get; set; }
-
-    /// <summary>
-    /// Whether the program continues from the previous timeslot (in the past I mean)
-    /// </summary>
-    public bool IsContinuedLeft { get; set; }
-
-    /// <summary>
-    /// Whether the program continues off-screen to the next timeslot
-    /// </summary>
-    public bool IsContinuedRight { get; set; }
+    [JsonIgnore]
+    public string Start { get; set; }
 
     /// <summary>
     /// The title of the program
@@ -54,6 +46,24 @@ public class ListingData
     public string? Rating { get; set; }
 }
 
+public class SpanInfo
+{
+    /// <summary>
+    /// The duration of the program in minutes.
+    /// </summary>
+    public int Span { get; set; }
+
+    /// <summary>
+    /// Whether the program continues from the previous timeslot (in the past I mean)
+    /// </summary>
+    public bool IsContinuedLeft { get; set; }
+
+    /// <summary>
+    /// Whether the program continues off-screen to the next timeslot
+    /// </summary>
+    public bool IsContinuedRight { get; set; }
+}
+
 public class ChannelData {
     /// <summary>
     /// Abbreviation of the channel
@@ -70,10 +80,21 @@ public class TvslSchema {
     /// <summary>
     /// Listings of what's currently on, for the number of timeslots we're showing
     /// </summary>
-    public Dictionary<string, IEnumerable<ListingData>> Listings { get; set; }
+    public Dictionary<string, List<ListingData>> Listings { get; set; }
 
     /// <summary>
     /// Channels in the guide
     /// </summary>
     public ImmutableSortedDictionary<string, ChannelData> Channels { get; set; }
+}
+
+/// <summary>
+/// Constants
+/// </summary>
+public static class Metadata
+{
+    /// <summary>
+    /// List of categories that are color-coded in the guide
+    /// </summary>
+    public static List<string> ColorCodedCategories = new List<string> { "sports event", "news", "kids", "movie" };
 }
