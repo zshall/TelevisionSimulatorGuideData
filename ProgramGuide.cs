@@ -19,7 +19,7 @@ namespace TelevisionSimulatorGuideData {
         /// <param name="lowerChannelLimitInclusive">If specified, filter out channels below this number.</param>
         /// <param name="upperChannelLimitExclusive">If specified, filter out channels above this number.</param>
         /// <returns></returns>
-        public TvslSchema GetData(DateTimeOffset? now = null, int numberOfTimeslots = 3, int minutesPerTimeslot = 30, int? lowerChannelLimitInclusive = null, int? upperChannelLimitExclusive = null)
+        public List<ChannelData> GetData(DateTimeOffset? now = null, int numberOfTimeslots = 3, int minutesPerTimeslot = 30, int? lowerChannelLimitInclusive = null, int? upperChannelLimitExclusive = null)
         {
             if (numberOfTimeslots < 1) {
                 throw new ArgumentOutOfRangeException(nameof(numberOfTimeslots), "Number of timeslots must be greater than 0.");
@@ -98,12 +98,13 @@ namespace TelevisionSimulatorGuideData {
                 };
             }).Where(p => p.Span > 0).OrderBy(p => p.Start);
 
-            return new TvslSchema {
-                Channels = channels,
-                Listings = listings
-                    .GroupBy(listing => listing.ChannelId) // Group listings by ChannelId
-                    .ToDictionary(group => group.Key, group => group.ToList()) // Convert to dictionary
-            };
+            foreach (var listing in listings) {
+                if (channels.TryGetValue(listing.ChannelId, out var channelData)) {
+                    channelData.Listings.Add(listing);
+                }
+            }
+
+            return channels.Values.ToList();
         }
 
         /// <summary>

@@ -1,5 +1,4 @@
-﻿using System.Collections.Immutable;
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace TelevisionSimulatorGuideData;
 
@@ -11,6 +10,7 @@ public class ListingData : SpanInfo
     /// <summary>
     /// Channel ID
     /// </summary>
+    [JsonIgnore]
     public string ChannelId { get; set; }
 
     /// <summary>
@@ -74,14 +74,14 @@ public class ChannelData {
     /// Channel number
     /// </summary>
     public int? Number { get; set; }
-}
 
-public class TvslSchema {
     /// <summary>
     /// Listings of what's currently on, for the number of timeslots we're showing
     /// </summary>
-    public Dictionary<string, List<ListingData>> Listings { get; set; }
+    public List<ListingData> Listings { get; set; } = new List<ListingData>();
+}
 
+public class TvslSchema {
     /// <summary>
     /// Channels in the guide
     /// </summary>
