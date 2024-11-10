@@ -55,18 +55,32 @@ namespace TelevisionSimulatorGuideData {
                     throw new ArgumentOutOfRangeException(nameof(lowerChannelLimitInclusive), "Lower channel limit must be less than upper channel limit.");
                 }
 
-                channels = L.Channels.Where(kv =>
-                    (!lowerChannelLimitInclusive.HasValue || kv.Value.Number >= lowerChannelLimitInclusive) &&
-                    (!upperChannelLimitExclusive.HasValue || kv.Value.Number < upperChannelLimitExclusive))
-                    .ToDictionary();
+                channels = L.Channels
+                    .Where(kv =>
+                        (!lowerChannelLimitInclusive.HasValue || kv.Value.Number >= lowerChannelLimitInclusive) &&
+                        (!upperChannelLimitExclusive.HasValue || kv.Value.Number < upperChannelLimitExclusive))
+                    .ToDictionary(
+                        kv => kv.Key,
+                        kv => new ChannelData {
+                            Abbr = kv.Value.Abbr,
+                            Number = kv.Value.Number,
+                            Listings = kv.Value.Listings.ToList()
+                        }
+                    );
 
                 programs = L.GetProgramsForTimeRange(startingTimeslot, endTime, channels.Select(kv => kv.Key).ToList());
-            }
-            else {
-                channels = L.Channels;
+            } else {
+                channels = L.Channels.ToDictionary(
+                    kv => kv.Key,
+                    kv => new ChannelData {
+                        Abbr = kv.Value.Abbr,
+                        Number = kv.Value.Number,
+                        Listings = kv.Value.Listings.ToList()
+                    }
+                );
                 programs = L.GetProgramsForTimeRange(startingTimeslot, endTime);
             }
-            
+
             var listings = programs.Select(p => {
                 var category = p.Elements("category").FirstOrDefault(p =>
                         Metadata.ColorCodedCategories.Contains(p.Value, StringComparer.OrdinalIgnoreCase))?.Value
