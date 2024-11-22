@@ -14,11 +14,14 @@ public class ListingData : SpanInfo
     public string ChannelId { get; set; }
 
     /// <summary>
-    /// The start time in minutes from midnight.
-    /// (Based on how the data is used I'm not sure if this will be useful since we start the guide from now)
+    /// The start time of the program
     /// </summary>
-    [JsonIgnore]
-    public string Start { get; set; }
+    public DateTimeOffset Start { get; set; }
+    
+    /// <summary>
+    /// For guides themes that operate without fluid columns, this is a list of all timeslots it's displayed on (0-indexed)
+    /// </summary>
+    public List<int> Timeslots { get; set; } = [];
 
     /// <summary>
     /// The title of the program
@@ -46,8 +49,7 @@ public class ListingData : SpanInfo
     public string? Rating { get; set; }
 }
 
-public class SpanInfo
-{
+public class SpanInfo {
     /// <summary>
     /// The duration of the program in minutes.
     /// </summary>

@@ -1,5 +1,4 @@
-﻿using System.Collections.Immutable;
-using System.Xml.Linq;
+﻿using System.Xml.Linq;
 using System.Xml.XPath;
 using L = TelevisionSimulatorGuideData.ListingFileService;
 
@@ -30,7 +29,7 @@ namespace TelevisionSimulatorGuideData {
             }
 
 #if DEBUG
-            now ??= DateTimeOffset.Parse("3/24/2024 12:15 AM"); // For testing purposes
+            now ??= DateTimeOffset.Parse("3/24/2024") + DateTimeOffset.Now.TimeOfDay; // For testing purposes
 #else
             now ??= DateTimeOffset.Now;
 #endif
@@ -95,12 +94,14 @@ namespace TelevisionSimulatorGuideData {
                     throw new InvalidOperationException("Program channel is missing.");
                 }
 
-                var spanInfo = GetSpan(start.ToDateTimeOffsetFromXmlTvTime(),
-                    p.Attribute("stop").Value.ToDateTimeOffsetFromXmlTvTime(), startingTimeslot, endTime);
+                var convertedStart = start.ToDateTimeOffsetFromXmlTvTime();
+                var convertedStop = p.Attribute("stop").Value.ToDateTimeOffsetFromXmlTvTime();
+
+                var spanInfo = GetSpan(convertedStart, convertedStop, startingTimeslot, endTime);
 
                 return new ListingData {
                     ChannelId = channel,
-                    Start = start,
+                    Start = start.ToDateTimeOffsetFromXmlTvTime(),
                     Title = p.Element("title")?.Value,
                     Category = category,
                     IsStereo = p.XPathSelectElement("stereo")?.Value != null,
@@ -108,7 +109,13 @@ namespace TelevisionSimulatorGuideData {
                     Rating = p.XPathSelectElement($"rating[@system='{(category == "movie" ? "MPAA" : "VCHIP")}']/value")?.Value,
                     Span = spanInfo.Span,
                     IsContinuedLeft = spanInfo.IsContinuedLeft,
-                    IsContinuedRight = spanInfo.IsContinuedRight
+                    IsContinuedRight = spanInfo.IsContinuedRight,
+                    Timeslots = Enumerable.Range(0, numberOfTimeslots).Where(p =>
+                        OverlapTime(
+                            startingTimeslot.AddMinutes(p * minutesPerTimeslot),
+                            startingTimeslot.AddMinutes((p + 1) * (minutesPerTimeslot)),
+                            convertedStart,
+                            convertedStop)).ToList()
                 };
             }).Where(p => p.Span > 0).OrderBy(p => p.Start);
 
@@ -158,6 +165,18 @@ namespace TelevisionSimulatorGuideData {
             }
 
             return si;
+        }
+
+        /// <see>
+        /// https://code-maze.com/csharp-determine-whether-two-date-ranges-overlap/
+        /// </see>
+        /// <param name="startTime1"></param>
+        /// <param name="endTime1"></param>
+        /// <param name="startTime2"></param>
+        /// <param name="endTime2"></param>
+        /// <returns></returns>
+        public static bool OverlapTime(DateTimeOffset startTime1, DateTimeOffset endTime1, DateTimeOffset startTime2, DateTimeOffset endTime2) {
+            return startTime1 <= endTime2 && startTime2 <= endTime1;
         }
     }
 }
