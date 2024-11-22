@@ -1,149 +1,182 @@
-using System.Collections.Immutable;
-using System.Xml;
+﻿using System.Xml.Linq;
 using System.Xml.XPath;
+using L = TelevisionSimulatorGuideData.ListingFileService;
 
-namespace TelevisionSimulatorGuideData;
-
-public class ProgramGuide
-{
+namespace TelevisionSimulatorGuideData {
     /// <summary>
-    /// Gets the current guide data in TVSL JSON format.
+    /// Reworked program guide to use the new data structure.
     /// </summary>
-    /// <param name="listingsFile"></param>
-    /// <param name="start"></param>
-    /// <returns></returns>
-    public ImmutableSortedDictionary<string, IEnumerable<GuideData>> GetData(string? listingsFile, DateTimeOffset? start = null)
-    {
-        ArgumentNullException.ThrowIfNull(listingsFile);
+    public class ProgramGuide {
+        private const int MinutesInDay = 1440;
 
-        start ??= DateTimeOffset.Now;
-        var doc = new XmlDocument();
-        doc.Load(listingsFile);
-        var xDoc = doc.ToXDocument();
-
-        var startingTimeslot = (int)Math.Floor(GetTimeslot(start.Value));
-        var isThreeGrid = true; // whether we're showing 3 timeslots per row
-
-        var numberOfTimeslots = isThreeGrid ? 3 : 1;
-        var timeslots = Enumerable.Range(startingTimeslot, numberOfTimeslots);
-
-        var channels = xDoc.XPathSelectElements("//channel").ToDictionary(k => k.Attribute("id").Value, e => e.Element("display-name").Value);
-
-        var categoriesWeCareAbout = new List<string> { "sports event", "news", "kids", "movie" };
-
-        var dateString = start.Value.ToString("yyyyMMdd");
-
-        var todaysPrograms = xDoc.XPathSelectElements(@$"//programme[
-		date = '{dateString}'
-	]").Select(p => {
-            var category = p.Elements("category").Where(p => categoriesWeCareAbout.Contains(p.Value, StringComparer.OrdinalIgnoreCase)).FirstOrDefault()?.Value.ToLowerInvariant();
-
-            return new ListingRecord(
-                p.Attribute("channel").Value,
-                GetTimeslot(p.Attribute("start").Value),
-                GetTimeslot(p.Attribute("stop").Value),
-                p.Element("title").Value,
-                category,
-                p.XPathSelectElement("stereo")?.Value,
-                p.XPathSelectElement("subtitles")?.Attribute("type")?.Value,
-                p.XPathSelectElement($"rating[@system='{(category == "movie" ? "MPAA" : "VCHIP")}']/value")?.Value
-            );
-        }).OrderBy(p => p.Start).GroupBy(p => p.Id);
-
-        var currentTimeslotsPrograms = todaysPrograms.Select(group => {
-            return timeslots.Select(i => group.Aggregate((x, y) => Math.Abs(x.Start - i) < Math.Abs(y.Start - i) ? x : y)).DistinctBy(p => p.Start);
-        });
-
-        return currentTimeslotsPrograms.ToImmutableSortedDictionary(key => channels[key.FirstOrDefault().Id], group => {
-            return group.Select((p, i) => new GuideData {
-                Channel = channels[p.Id],
-                Timeslot = i,
-                Span = GetSpan(group, i, startingTimeslot, isThreeGrid),
-                IsContinuedLeft = p.Start < startingTimeslot,
-                IsContinuedRight = p.End > startingTimeslot + numberOfTimeslots,
-                Title = p.Title,
-                Category = p.Category,
-                IsStereo = null != p.Stereo,
-                IsSubtitled = null != p.Subtitles,
-                Rating = p.Rating
-            });
-        });
-    }
-
-    /// <summary>
-    /// Gets the span of the program in timeslots, up to the maximum number of timeslots.
-    /// </summary>
-    /// <param name="group">List of programs</param>
-    /// <param name="i"></param>
-    /// <param name="startingTimeslot"></param>
-    /// <param name="numberOfTimeslots"></param>
-    /// <returns></returns>
-    private int GetSpan(IEnumerable<ListingRecord> group, int i, int startingTimeslot, bool isThreeGrid) {
-        if (!isThreeGrid || group.Count() == 3) {
-            return 1;
-        }
-
-        if (group.Count() == 1) {
-            return 3;
-        }
-
-        // one of the programs needs to be 1 timeslot wide and the other needs to be 2.
-        // not my finest code... it produces results but they're not always correct.
-        // the problem with this method and why I've had so much trouble with it is that it really
-        // requires us to know what the other programs have spanned; we're coalescing the closest programs
-        // together and rounding off to the nearest timeslot rather than just showing the actual data.
-        var first = group.First();
-
-        if (i == 0) {
-            return first.End > startingTimeslot + 1 ? 2 : 1;
-        } else if (GetSpan(group, 0, startingTimeslot, isThreeGrid) == 2) {
-            return 1;
-        }
-
-        return 2;
-    }
-
-    /// <summary>
-    /// Gets the timeslot from a date string.
-    /// </summary>
-    /// <param name="dateString"></param>
-    /// <returns></returns>
-    private static double GetTimeslot(string? dateString)
-    {
-        var converted = ConvertDateString(dateString);
-        return GetTimeslot(converted);
-    }
-
-    /// <summary>
-    /// Gets the timeslot for the given date.
-    /// </summary>
-    /// <param name="d"></param>
-    /// <returns></returns>
-    private static double GetTimeslot(DateTimeOffset d)
-    {
-        return (d.Hour * 2) + Math.Round((double)d.Minute / 60, 3);
-    }
-
-    /// <summary>
-    /// Converts a date string to a DateTimeOffset.
-    /// </summary>
-    /// <param name="dateString"></param>
-    /// <returns></returns>
-    /// <exception cref="ArgumentException"></exception>
-    private static DateTimeOffset ConvertDateString(string? dateString)
-    {
-        string format = "yyyyMMddHHmmss zzz";
-        DateTimeOffset result;
-
-        if (DateTimeOffset.TryParseExact(dateString, format, null, System.Globalization.DateTimeStyles.None, out result))
+        /// <summary>
+        /// Gets the current guide data in TVSL JSON format.
+        /// </summary>
+        /// <param name="now">Time to retrieve data for</param>
+        /// <param name="numberOfTimeslots">Number of timeslots to provide info on</param>
+        /// <param name="minutesPerTimeslot">Minutes per timeslot to determine min and max range for data</param>
+        /// <param name="lowerChannelLimitInclusive">If specified, filter out channels below this number.</param>
+        /// <param name="upperChannelLimitExclusive">If specified, filter out channels above this number.</param>
+        /// <returns></returns>
+        public List<ChannelData> GetData(DateTimeOffset? now = null, int numberOfTimeslots = 3, int minutesPerTimeslot = 30, int? lowerChannelLimitInclusive = null, int? upperChannelLimitExclusive = null)
         {
-            return result;
+            if (numberOfTimeslots < 1) {
+                throw new ArgumentOutOfRangeException(nameof(numberOfTimeslots), "Number of timeslots must be greater than 0.");
+            }
+
+            if (MinutesInDay % minutesPerTimeslot != 0) {
+                throw new ArgumentOutOfRangeException(nameof(minutesPerTimeslot), "Minutes per timeslot must divide evenly into the number of minutes in a day (1440). Valid options are: 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24, 30, 36, 40, 45, 48, 60, 72, 80, 90, 120, 144, 180, 240, 360, 720, 1440.");
+            }
+
+#if DEBUG
+            now ??= DateTimeOffset.Parse("3/24/2024") + DateTimeOffset.Now.TimeOfDay; // For testing purposes
+#else
+            now ??= DateTimeOffset.Now;
+#endif
+            if (null == L.ListingsDocument) {
+                throw new InvalidOperationException("Listings document is not loaded yet. Ensure the file exists and retry the request.");
+            }
+
+            if (null == L.Channels) {
+                throw new InvalidOperationException("Channel data is not loaded yet. Ensure the file exists and retry the request.");
+            }
+
+            var resolution = MinutesInDay / minutesPerTimeslot;
+            var startingTimeslot = Enumerable.Range(0, resolution)
+                .Select(p => now.Value.Date.AddMinutes(p * minutesPerTimeslot))
+                .Last(p => p <= now);
+            var endTime = startingTimeslot.AddMinutes(minutesPerTimeslot * numberOfTimeslots);
+
+            Dictionary<string, ChannelData> channels;
+            IEnumerable<XElement> programs;
+            if (lowerChannelLimitInclusive.HasValue || upperChannelLimitExclusive.HasValue) {
+                if (lowerChannelLimitInclusive.HasValue && upperChannelLimitExclusive.HasValue && lowerChannelLimitInclusive >= upperChannelLimitExclusive) {
+                    throw new ArgumentOutOfRangeException(nameof(lowerChannelLimitInclusive), "Lower channel limit must be less than upper channel limit.");
+                }
+
+                channels = L.Channels
+                    .Where(kv =>
+                        (!lowerChannelLimitInclusive.HasValue || kv.Value.Number >= lowerChannelLimitInclusive) &&
+                        (!upperChannelLimitExclusive.HasValue || kv.Value.Number < upperChannelLimitExclusive))
+                    .ToDictionary(
+                        kv => kv.Key,
+                        kv => new ChannelData {
+                            Abbr = kv.Value.Abbr,
+                            Number = kv.Value.Number,
+                            Listings = kv.Value.Listings.ToList()
+                        }
+                    );
+
+                programs = L.GetProgramsForTimeRange(startingTimeslot, endTime, channels.Select(kv => kv.Key).ToList());
+            } else {
+                channels = L.Channels.ToDictionary(
+                    kv => kv.Key,
+                    kv => new ChannelData {
+                        Abbr = kv.Value.Abbr,
+                        Number = kv.Value.Number,
+                        Listings = kv.Value.Listings.ToList()
+                    }
+                );
+                programs = L.GetProgramsForTimeRange(startingTimeslot, endTime);
+            }
+
+            var listings = programs.Select(p => {
+                var category = p.Elements("category").FirstOrDefault(p =>
+                        Metadata.ColorCodedCategories.Contains(p.Value, StringComparer.OrdinalIgnoreCase))?.Value
+                    .ToLowerInvariant();
+                var start = p.Attribute("start")?.Value;
+                if (string.IsNullOrWhiteSpace(start)) {
+                    throw new InvalidOperationException("Program start time is missing.");
+                }
+
+                var channel = p.Attribute("channel")?.Value;
+                if (string.IsNullOrWhiteSpace(channel)) {
+                    throw new InvalidOperationException("Program channel is missing.");
+                }
+
+                var convertedStart = start.ToDateTimeOffsetFromXmlTvTime();
+                var convertedStop = p.Attribute("stop").Value.ToDateTimeOffsetFromXmlTvTime();
+
+                var spanInfo = GetSpan(convertedStart, convertedStop, startingTimeslot, endTime);
+
+                return new ListingData {
+                    ChannelId = channel,
+                    Start = start.ToDateTimeOffsetFromXmlTvTime(),
+                    Title = p.Element("title")?.Value,
+                    Category = category,
+                    IsStereo = p.XPathSelectElement("stereo")?.Value != null,
+                    IsSubtitled = p.XPathSelectElement("subtitles")?.Value != null,
+                    Rating = p.XPathSelectElement($"rating[@system='{(category == "movie" ? "MPAA" : "VCHIP")}']/value")?.Value,
+                    Span = spanInfo.Span,
+                    IsContinuedLeft = spanInfo.IsContinuedLeft,
+                    IsContinuedRight = spanInfo.IsContinuedRight,
+                    Timeslots = Enumerable.Range(0, numberOfTimeslots).Where(p =>
+                        OverlapTime(
+                            startingTimeslot.AddMinutes(p * minutesPerTimeslot),
+                            startingTimeslot.AddMinutes((p + 1) * (minutesPerTimeslot)),
+                            convertedStart,
+                            convertedStop)).ToList()
+                };
+            }).Where(p => p.Span > 0).OrderBy(p => p.Start);
+
+            foreach (var listing in listings) {
+                if (channels.TryGetValue(listing.ChannelId, out var channelData)) {
+                    channelData.Listings.Add(listing);
+                }
+            }
+
+            return channels.Values.ToList();
         }
-        else
-        {
-            throw new ArgumentException("Invalid date string format.");
+
+        /// <summary>
+        /// Gets the remaining time in minutes for the current program.
+        /// </summary>
+        /// <param name="start"></param>
+        /// <param name="stop"></param>
+        /// <param name="startingTimeslot"></param>
+        /// <param name="endTime"></param>
+        /// <returns></returns>
+        /// <exception cref="NotImplementedException"></exception>
+        private SpanInfo GetSpan(DateTimeOffset start, DateTimeOffset stop, DateTimeOffset startingTimeslot, DateTimeOffset endTime) {
+            if (stop > endTime && start < startingTimeslot) {
+                return new SpanInfo {
+                    Span = (int)(endTime - startingTimeslot).TotalMinutes,
+                    IsContinuedLeft = true,
+                    IsContinuedRight = true
+                };
+            }
+
+            var si = new SpanInfo();
+            
+            if (stop < startingTimeslot) {
+                return si;
+            }
+
+            si.Span = (int)(stop - start).TotalMinutes;
+            
+            if (start < startingTimeslot) {
+                si.Span -= (int)(startingTimeslot - start).TotalMinutes;
+                si.IsContinuedLeft = true;
+            }
+
+            if (stop > endTime) {
+                si.Span -= (int)(stop - endTime).TotalMinutes;
+                si.IsContinuedRight = true;
+            }
+
+            return si;
+        }
+
+        /// <see>
+        /// https://code-maze.com/csharp-determine-whether-two-date-ranges-overlap/
+        /// </see>
+        /// <param name="startTime1"></param>
+        /// <param name="endTime1"></param>
+        /// <param name="startTime2"></param>
+        /// <param name="endTime2"></param>
+        /// <returns></returns>
+        public static bool OverlapTime(DateTimeOffset startTime1, DateTimeOffset endTime1, DateTimeOffset startTime2, DateTimeOffset endTime2) {
+            return startTime1 <= endTime2 && startTime2 <= endTime1;
         }
     }
 }
-
-internal record ListingRecord(string Id, double Start, double End, string Title, string? Category, string? Stereo, string? Subtitles, string? Rating);
